@@ -50,6 +50,7 @@ pip install -r requirements.txt
 python scripts/generate_dataset_slope.py
 ```
 Скрипт создаст label.csv с параметрами filename, slope и offset для каждого кадра.
+
 4. Обучение модели:
 ```
 python main.py train --config configs/train.yaml
