@@ -4,6 +4,11 @@ on:
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        required: false
+        default: 'Manual check'
 
 permissions:
   contents: write
@@ -24,20 +29,3 @@ jobs:
           pip install -r requirements.txt
       - name: Run tests
         run: python utils/generate_dataset_slope.py && python main.py train --config configs/train.yaml
-build:
-  needs: [ test ]
-release:
-  needs: build
-  runs-on: ubuntu-latest
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # provided automatically by GitHub
-  steps:
-    - uses: actions/checkout@v3
-    - uses: actions/download-artifact@v4
-      with: { name: dist }
-    - id: create_release
-      uses: elgohr/Github-Release-Action@v5
-      with:
-        title: Dev Build ${{ github.sha }}
-        tag: dev-${{ github.sha }}
-        prerelease: true
