@@ -52,7 +52,7 @@ python scripts/generate_dataset_slope.py
 Скрипт создаст label.csv с параметрами filename, slope и offset для каждого кадра.
 
 4. Обучение модели:
-```
+```bash
 python main.py train --config configs/train.yaml
 ```
 Веса сохранятся в checkpoints/, логи в logs/.
@@ -88,3 +88,17 @@ training:
 ```bash
 tensorboard --logdir logs/
 ```
+
+
+## Инференс
+```bash
+python main.py predict --ckpt <model_ckpt> --input <folder or image>
+```
+Все гиперпараметры управляются через configs/train.yaml:
+```yaml
+inference:
+  threshold: 0.5
+  save_mask: false
+  save_visualization: true 
+  output_dir: ./logs/predictions 
+  ```

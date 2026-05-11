@@ -13,6 +13,15 @@ def create_callbacks(model, val_file_list, log_dir, ckpt_dir, cfg):
     log_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
+    predict_log_dir = log_dir / "predict_output"
+    if predict_log_dir.exists() and not predict_log_dir.is_dir():
+        predict_log_dir.unlink()
+    predict_log_dir.mkdir(parents=True, exist_ok=True)
+    predict_log_dir = (log_dir / "predict_output").resolve()
+    print(Path(predict_log_dir).is_dir())
+    tf.io.gfile.makedirs(str(predict_log_dir))
+    file_writer = tf.summary.create_file_writer(str(predict_log_dir))
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
     tb_callback = tf.keras.callbacks.TensorBoard(
@@ -27,10 +36,6 @@ def create_callbacks(model, val_file_list, log_dir, ckpt_dir, cfg):
         save_best_only=True,
         mode='max'
     )
-
-    predict_log_dir = log_dir / "predict_output"
-    predict_log_dir.mkdir(parents=True, exist_ok=True)
-    file_writer = tf.summary.create_file_writer(str(predict_log_dir))
 
     data_cfg = cfg.get("data", {})
     images_dir = Path(data_cfg.get("paths", {}).get("images", "dataset/images"))

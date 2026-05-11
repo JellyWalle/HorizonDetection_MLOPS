@@ -6,7 +6,7 @@ import tensorflow as tf
 from time import time as timer
 from pathlib import Path
 
-from data import SegmentationDataGenerator, load_and_split_data, get_augmentations
+from src.data import SegmentationDataGenerator, load_and_split_data, get_augmentations
 from src.models.unet import create_unet_model
 from src.training.callbacks import create_callbacks
 
@@ -32,13 +32,15 @@ class Trainer:
 
         img_size = tuple(self.cfg["data"]["image_size"])
         train_gen = SegmentationDataGenerator(
-            file_list=train_list, batch_size=self.cfg["data"]["batch_size"],
-            image_size=img_size, augmentation=get_augmentations()
+            file_list=train_list, 
+            data_cfg=self.cfg,
+            augmentation=get_augmentations()
         )
         val_gen = SegmentationDataGenerator(
-            file_list=val_list, batch_size=self.cfg["data"]["batch_size"],
-            image_size=img_size, shuffle=False
+            file_list=val_list, 
+            data_cfg=self.cfg,
         )
+        val_gen.shuffle=False
 
         print("Building UNet")
         model = create_unet_model(
@@ -65,9 +67,9 @@ class Trainer:
             epochs=self.cfg["training"]["epochs"],
             validation_data=val_gen,
             callbacks=callbacks,
-            max_queue_size=self.cfg["training"]["max_queue_size"],
-            workers=self.cfg["training"]["workers"],
-            use_multiprocessing=self.cfg["training"]["use_multiprocessing"]
+            #max_queue_size=self.cfg["training"]["max_queue_size"],
+            #workers=self.cfg["training"]["workers"],
+            #use_multiprocessing=self.cfg["training"]["use_multiprocessing"]
         )
 
         print("Evaluating")
