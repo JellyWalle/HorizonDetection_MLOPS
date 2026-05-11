@@ -30,4 +30,4 @@ jobs:
       - name: Run tests (Dataset Verification)
         run: python utils/generate_dataset_slope.py
       - name: Run tests (Train)
-        run: python main.py train --config configs/test.yaml
+        run: python main.py train --config configs/train.yaml
