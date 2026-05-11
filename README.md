@@ -47,7 +47,7 @@ pip install -r requirements.txt
 2. Разметьте изображения в CVAT и сохраните маски
 3. Для анализа геометрии горизонта или валидации датасета: 
 ```bash
-python scripts/generate_dataset_slope.py
+python utils/generate_dataset_slope.py
 ```
 Скрипт создаст label.csv с параметрами filename, slope и offset для каждого кадра.
 
