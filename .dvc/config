@@ -1,17 +1,10 @@
 [core]
-    remote = myremote
     autostage = true
-['remote "yandex-s3"']
-    url = s3://mlops-ijellyfish-2026/
-    endpointurl = https://storage.yandexcloud.net
-    access_key_id = ${YANDEX_ACCESS_KEY}
-    secret_access_key = ${YANDEX_SECRET_KEY}
-    use_ssl = true
-    region = ru-central1
+    remote = myremote
 ['remote "myremote"']
     url = s3://mlops-ijellyfish-2026
     endpointurl = https://storage.yandexcloud.net
-    access_key_id = ${YANDEX_ACCESS_KEY}
-    secret_access_key = ${YANDEX_SECRET_KEY}
-    use_ssl = true
     region = ru-central1
+    use_ssl = true
+    #secret_access_key = ${YANDEX_SECRET_KEY}
+    #access_key_id = ${YANDEX_ACCESS_KEY}
