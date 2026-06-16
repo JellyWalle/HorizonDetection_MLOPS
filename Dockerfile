@@ -1,5 +1,5 @@
 # ── Stage 1: base image ──────────────────────────────────────────────────────
-FROM arm64v8/python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
