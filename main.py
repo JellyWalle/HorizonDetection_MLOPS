@@ -12,13 +12,14 @@ def main():
     parser.add_argument("mode", choices=["train", "eval", "predict"], help="Run mode")
     parser.add_argument("--config", default="configs/train.yaml", help="Config file path")
     parser.add_argument("--ckpt", help="Checkpoint path for eval/predict")
+    parser.add_argument("--input", help="Input image or folder for predict mode")
     args = parser.parse_args()
 
-    if not args.config.exists():
+    if not Path(args.config).exists():
         print(f" Check Config file: {args.config}")
         sys.exit(1)
 
-    cfg = load_config()
+    cfg = load_config(args.config)
     
     if args.mode == "train":
         from src.training.trainer import Trainer
@@ -27,8 +28,8 @@ def main():
         from src.evaluation import evaluator
         evaluator.run(cfg, checkpoint=args.ckpt)
     elif args.mode == "predict":
-        from src.inference import predictor
-        predictor.run(cfg, checkpoint=args.ckpt)
+        from src.inference import predict
+        predict.run(cfg, checkpoint=args.ckpt, input_source=args.input)
 
 if __name__ == "__main__":
     main()
