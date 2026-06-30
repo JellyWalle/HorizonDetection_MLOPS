@@ -332,7 +332,7 @@
   </div>
   <div class="status-bar">
     <div id="api-status"><span class="status-dot red"></span> Проверка API...</div>
-    <div style="margin-top:6px;font-size:11px;">API: localhost:8001</div>
+    <div style="margin-top:6px;font-size:11px;">API: localhost:8000</div>
   </div>
 </nav>
 
@@ -576,7 +576,7 @@
 <div id="toast"></div>
 
 <script>
-const API = 'http://localhost:8001';
+const API = 'http://localhost:8000';
 
 // ── State ──
 let predictions = [];
@@ -896,7 +896,7 @@ function simulateDrift() {
 }
 
 function openDriftReport() {
-  window.open('http://localhost:8001/docs', '_blank');
+  window.open('http://localhost:8000/docs', '_blank');
   showToast('💡 Полный отчёт: запустите drift_report.py в терминале');
 }
 

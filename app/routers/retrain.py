@@ -15,6 +15,7 @@ import copy
 import shutil
 import logging
 import threading
+import zoneinfo
 import datetime
 from pathlib import Path
 from typing import Optional
@@ -107,84 +108,119 @@ def _run_training(app, epochs: int, model_path: str):
         get_augmentations,
     )
     from src.models.unet import create_unet_model
+    import mlflow
 
     try:
+        mlflow.set_tracking_uri("http://mlflow:8080")
+        experiment_name = "Horizon"
+        experiment = mlflow.get_experiment_by_name(experiment_name)
+        if experiment is None:
+            logger.info(f"Creating new experiment {experiment_name}...")
+            experiment_id = mlflow.create_experiment(experiment_name)
+        else:
+            logger.info(f"Found existing experiment {experiment_name}...")
+            experiment_id = experiment.experiment_id
+    except Exception as e:
+        logger.exception("Retrain failed")
         _set_status(
-            state="running",
-            epoch=0,
-            total_epochs=epochs,
-            loss=None,
-            val_loss=None,
-            metric=None,
-            message="Подготовка данных…",
-            started_at=datetime.datetime.now().isoformat(timespec="seconds"),
-            finished_at=None,
+            state="error",
+            message=f"Ошибка обучения: {e}",
+            finished_at=datetime.datetime.now().isoformat(timespec="seconds", sep=" "),
         )
+        if _train_lock.locked():
+            _train_lock.release()
+        return
 
-        # Берём конфиг приложения и переопределяем число эпох из запроса.
-        cfg = copy.deepcopy(app.state.cfg)
-        cfg["training"]["epochs"] = epochs
+    try:
+        with mlflow.start_run(experiment_id=experiment_id, run_name=datetime.datetime.now().isoformat(timespec="seconds"), log_system_metrics=False) as mlflow_run:
+            _set_status(
+                state="running",
+                epoch=0,
+                total_epochs=epochs,
+                loss=None,
+                val_loss=None,
+                metric=None,
+                message="Подготовка данных…",
+                started_at=datetime.datetime.now().isoformat(timespec="seconds"),
+                finished_at=None,
+            )
 
-        paths = cfg["paths"]
-        dataset_dir = Path(paths["dataset"])
-        img_size = tuple(cfg["data"]["image_size"])
+            # Берём конфиг приложения и переопределяем число эпох из запроса.
+            cfg = copy.deepcopy(app.state.cfg)
+            cfg["training"]["epochs"] = epochs
 
-        train_list, val_list = load_and_split_data(dataset_dir, cfg["data"])
-        if not train_list:
-            raise RuntimeError("Нет данных для обучения в dataset/.")
+            mlflow.log_param("epochs", epochs) 
 
-        train_gen = SegmentationDataGenerator(
-            file_list=train_list, data_cfg=cfg, augmentation=get_augmentations()
-        )
-        val_gen = SegmentationDataGenerator(file_list=val_list, data_cfg=cfg)
-        val_gen.shuffle = False
+            paths = cfg["paths"]
+            dataset_dir = Path(paths["dataset"])
+            img_size = tuple(cfg["data"]["image_size"])
 
-        _set_status(message="Построение модели U-Net…")
-        model = create_unet_model(
-            image_size=img_size,
-            num_classes=cfg["data"]["num_classes"],
-            learning_rate=cfg["training"]["learning_rate"],
-            n_encoder_decoder=cfg["training"]["n_encoder_decoder"],
-            initial_filters=cfg["training"]["initial_filters"],
-        )
+            train_list, val_list = load_and_split_data(dataset_dir, cfg["data"])
+            if not train_list:
+                raise RuntimeError("Нет данных для обучения в dataset/.")
 
-        _set_status(message=f"Старт обучения на {epochs} эпох…")
-        model.fit(
-            train_gen,
-            epochs=epochs,
-            validation_data=val_gen,
-            callbacks=[_make_progress_callback(epochs)],
-            verbose=0,
-        )
+            train_gen = SegmentationDataGenerator(
+                file_list=train_list, data_cfg=cfg, augmentation=get_augmentations()
+            )
+            val_gen = SegmentationDataGenerator(file_list=val_list, data_cfg=cfg)
+            val_gen.shuffle = False
 
-        # ── Атомарное сохранение и горячая подмена ──────────────────────────
-        _set_status(message="Сохранение новой модели…")
-        model_path = Path(model_path)
-        model_path.parent.mkdir(parents=True, exist_ok=True)
+            _set_status(message="Построение модели U-Net…")
+            model = create_unet_model(
+                image_size=img_size,
+                num_classes=cfg["data"]["num_classes"],
+                learning_rate=cfg["training"]["learning_rate"],
+                n_encoder_decoder=cfg["training"]["n_encoder_decoder"],
+                initial_filters=cfg["training"]["initial_filters"],
+            )
 
-        # Сначала пишем во временный файл, затем заменяем — чтобы при сбое
-        # не остаться без рабочего чекпойнта.
-        # ВАЖНО: Keras определяет формат по расширению, поэтому временный и
-        # резервный файлы тоже должны оканчиваться на .keras, иначе model.save
-        # падает с "Invalid filepath extension for saving".
-        tmp_path = model_path.parent / (model_path.stem + ".tmp.keras")
-        backup_path = model_path.parent / (model_path.stem + ".bak.keras")
-        model.save(str(tmp_path))
+            mlflow.log_param("num_classes", cfg["data"]["num_classes"])
+            mlflow.log_param("learning_rate", cfg["training"]["learning_rate"]) 
+            mlflow.log_param("n_encoder_decoder", cfg["training"]["n_encoder_decoder"]) 
+            mlflow.log_param("initial_filters", cfg["training"]["initial_filters"]) 
 
-        if model_path.exists():
-            shutil.copy2(str(model_path), str(backup_path))
-        os.replace(str(tmp_path), str(model_path))
+            _set_status(message=f"Старт обучения на {epochs} эпох…")
+            model.fit(
+                train_gen,
+                epochs=epochs,
+                validation_data=val_gen,
+                callbacks=[_make_progress_callback(epochs)],
+                verbose=0,
+            )
 
-        # Горячая подмена модели в памяти сервиса — инференс сразу новый.
-        app.state.model = model
+            # ── Атомарное сохранение и горячая подмена ──────────────────────────
+            _set_status(message="Сохранение новой модели…")
+            model_path = Path(model_path)
+            model_path.parent.mkdir(parents=True, exist_ok=True)
 
-        metric = get_status().get("metric")
-        _set_status(
-            state="done",
-            message="Переобучение завершено. Модель обновлена.",
-            finished_at=datetime.datetime.now().isoformat(timespec="seconds"),
-        )
-        logger.info("Retrain finished. New model live. IoU=%s", metric)
+            # Сначала пишем во временный файл, затем заменяем — чтобы при сбое
+            # не остаться без рабочего чекпойнта.
+            # ВАЖНО: Keras определяет формат по расширению, поэтому временный и
+            # резервный файлы тоже должны оканчиваться на .keras, иначе model.save
+            # падает с "Invalid filepath extension for saving".
+            tmp_path = model_path.parent / (model_path.stem + ".tmp.keras")
+            backup_path = model_path.parent / (model_path.stem + ".bak.keras")
+            model.save(str(tmp_path))
+
+            if model_path.exists():
+                shutil.copy2(str(model_path), str(backup_path))
+            os.replace(str(tmp_path), str(model_path))
+
+            # Горячая подмена модели в памяти сервиса — инференс сразу новый.
+            app.state.model = model
+
+            metric = get_status().get("metric")
+            _set_status(
+                state="done",
+                message="Переобучение завершено. Модель обновлена.",
+                finished_at=datetime.datetime.now().isoformat(timespec="seconds"),
+            )
+            mlflow.log_metric("IoU_test", metric) 
+            # mlflow.register_model("models:/Horizon/Production", name=datetime.datetime.now(tz=zoneinfo.ZoneInfo("Europe/Moscow")).isoformat(timespec="seconds", sep=" ").replace(":", "-"))
+            mlflow.tensorflow.log_model(model=model, artifact_path="model", registered_model_name=datetime.datetime.now(tz=zoneinfo.ZoneInfo("Europe/Moscow")).isoformat(timespec="seconds", sep=" ").replace(":", "-"))
+            model_uri = f"runs:/{mlflow_run.info.run_id}/model"
+            mlflow.register_model(model_uri, "latest")
+            logger.info("Retrain finished. New model live. IoU=%s", metric)
 
     except Exception as e:  # noqa: BLE001 — хотим поймать любую ошибку обучения
         logger.exception("Retrain failed")
