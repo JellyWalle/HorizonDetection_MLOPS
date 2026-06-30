@@ -1,5 +1,4 @@
 [core]
-    remote = yandex-s3
     autostage = true
 ['remote "yandex-s3"']
     url = s3://mlops-ijellyfish-2026
