@@ -1,0 +1,66 @@
+# k8s/deployment.yaml — Minikube
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: horizon-detection
+  labels:
+    app: horizon-detection
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: horizon-detection
+  template:
+    metadata:
+      labels:
+        app: horizon-detection
+    spec:
+      containers:
+        - name: api
+          image: horizon-detection:v0.2
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: CONFIG_PATH
+              value: /app/configs/train.yaml
+            - name: MODEL_PATH
+              value: /app/checkpoints/model.keras
+            - name: REFERENCE_DIR
+              value: /app/dataset/images
+            - name: TF_CPP_MIN_LOG_LEVEL
+              value: "2"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: horizon-detection
+spec:
+  selector:
+    app: horizon-detection
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP

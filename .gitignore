@@ -1,6 +1,44 @@
-.venv
-dataset_
-key
-logs
-*.keras
-*.pyc
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# Models
+checkpoints/*.keras
+checkpoints/*.h5
+*.h5
+
+# DVC cache
+.dvc/cache/
+
+# Environment variables
+.env
+.env.local
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.bak

@@ -1,0 +1,149 @@
+# docker-compose.yml — LOCAL DEBUG ONLY
+# Включает: FastAPI сервис + Prometheus + Grafana
+
+services:
+
+  # ── FastAPI сервис ─────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: horizon-detection:dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./checkpoints:/app/checkpoints        # rw: переобучение сохраняет сюда новую модель
+      - ./configs:/app/configs:ro
+      - ./app:/app/app:ro
+      - ./src:/app/src:ro
+      - ./monitoring/drift/current:/app/monitoring/drift/current
+      - ./dataset:/app/dataset:ro  
+    environment:
+      CONFIG_PATH: configs/train.yaml
+      MODEL_PATH: checkpoints/model.keras
+      TF_CPP_MIN_LOG_LEVEL: "2"
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"   # пароль для входа
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on:
+      - prometheus
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: minio
+    # user: 1000:1000
+    restart: always
+    environment:
+      MINIO_ROOT_USER: "admin"
+      MINIO_ROOT_PASSWORD: "password"
+    # networks:
+    #   - minio-net
+    ports:
+      - "9080:9080"
+    volumes:
+      - minio_data:/data
+    command: server /data --address "0.0.0.0:9080"
+
+  feast_db:
+    restart: always
+    image: postgres:14.9-alpine3.18
+    container_name: feast_db
+    ports:
+      - 5445:5445
+    environment:
+      POSTGRES_USER: "feast"
+      POSTGRES_PASSWORD: "password"
+      POSTGRES_DB: "feast"
+    volumes:
+      - pg_feast_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "5445", "-U", "feast", "-d", "feast"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  mlflow_db:
+    restart: always
+    image: postgres:14.9-alpine3.18
+    container_name: mlflow_db
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mlflow
+    volumes:
+      - pg_mlflow_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "5432", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  tracking_server:
+    restart: always
+    build: ./
+    image: burakince/mlflow:3.14
+    container_name: mlflow
+    depends_on:
+      - mlflow_db
+      - feast_db
+      - minio
+    ports:
+     - 8080:8080/tcp
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: "http://"
+    command: >
+      python -m mlflow server
+      --backend-store-uri postgresql://postgres:postgres@mlflow_db:5432/mlflow
+      --host 0.0.0.0
+      --port 8080 
+      --serve-artifacts
+      --artifacts-destination s3://horizon/mlflow
+      --allowed-hosts "*"
+      --cors-allowed-origins "*"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  pg_feast_data:
+  pg_mlflow_data:
+  minio_data:

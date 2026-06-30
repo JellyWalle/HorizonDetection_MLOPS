@@ -6,4 +6,5 @@ pyyaml
 scikit-learn
 tensorflow
 tensorboard
+mlflow[s3]
 
